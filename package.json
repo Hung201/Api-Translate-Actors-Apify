@@ -1,0 +1,19 @@
+{
+    "name": "alibaba-translate",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "translate.js",
+    "scripts": {
+        "start": "node translate.js"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "axios": "^1.6.7",
+        "cheerio": "^1.0.0",
+        "dotenv": "^17.0.1",
+        "express": "^5.1.0",
+        "node-fetch": "^3.3.2",
+        "openai": "^5.8.2",
+        "p-limit": "^6.2.0"
+    }
+}
