@@ -6,11 +6,11 @@ import path from 'path';
 
 export class AlibabaService {
         constructor() {
-                this.apiUrl = 'https://api-translate.daisan.vn/translate/batch';
-                this.BATCH_SIZE = 125;
-                this.CONCURRENT_BATCHES = 7;
+                this.apiUrl = process.env.TRANSLATE_API_URL || 'https://api-translate.daisan.vn/translate/batch';
+                this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE) || 125;
+                this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES) || 7;
                 this.limit = pLimit(this.CONCURRENT_BATCHES);
-                this.backupDir = 'backup_translations';
+                this.backupDir = process.env.TRANSLATE_BACKUP_DIR || 'backup_translations';
 
                 this.ensureBackupDirectory();
         }
@@ -23,13 +23,13 @@ export class AlibabaService {
         }
 
         generateOutputFileName() {
-                const now = new Date();
-                const timestamp = now.toISOString().replace(/[:.]/g, '-');
+                let now = new Date();
+                let timestamp = now.toISOString().replace(/[:.]/g, '-');
                 return `data_alibaba_translated_${timestamp}.json`;
         }
 
         async translateBatch(texts) {
-                const response = await fetch(this.apiUrl, {
+                let response = await fetch(this.apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -43,7 +43,7 @@ export class AlibabaService {
                         throw new Error(`API error: ${response.status} - ${await response.text()}`);
                 }
 
-                const data = await response.json();
+                let data = await response.json();
                 return data.translated_texts;
         }
 
@@ -54,7 +54,7 @@ export class AlibabaService {
 
                 data.forEach((item, itemIdx) => {
                         if (item.content) {
-                                const $ = cheerio.load(item.content, {
+                                let $ = cheerio.load(item.content, {
                                         decodeEntities: false,
                                         _useHtmlParser2: true,
                                         lowerCaseTags: false,
@@ -74,7 +74,7 @@ export class AlibabaService {
                                 };
 
                                 let nodeIdx = 0;
-                                const collectTextNodes = (node) => {
+                                let collectTextNodes = (node) => {
                                         if (node.type === 'text' && node.data.trim()) {
                                                 allTextNodes.push(node.data);
                                                 nodeRefs.push({ itemIdx, nodeIdx });
@@ -98,13 +98,13 @@ export class AlibabaService {
         async fetchApifyDataByUrl(url) {
                 try {
                         console.log(`Đang lấy dữ liệu từ: ${url}`);
-                        const response = await fetch(url);
+                        let response = await fetch(url);
 
                         if (!response.ok) {
                                 throw new Error(`Lỗi HTTP: ${response.status}`);
                         }
 
-                        const data = await response.json();
+                        let data = await response.json();
                         return data;
                 } catch (error) {
                         console.error('Lỗi khi lấy dữ liệu:', error.message);
@@ -114,27 +114,27 @@ export class AlibabaService {
 
         async translateContent(data) {
                 // Dịch titles
-                const titles = data.map(item => item.title);
-                const translatedTitles = await this.translateBatch(titles);
+                let titles = data.map(item => item.title);
+                let translatedTitles = await this.translateBatch(titles);
 
                 data.forEach((item, i) => {
                         item.title = translatedTitles[i] || item.title;
                 });
 
                 // Dịch content
-                const { allTextNodes, nodeRefs, cheerioObjs } = this.extractTextNodesFromContent(data);
+                let { allTextNodes, nodeRefs, cheerioObjs } = this.extractTextNodesFromContent(data);
 
                 if (allTextNodes.length > 0) {
-                        const batches = [];
+                        let batches = [];
                         for (let i = 0; i < allTextNodes.length; i += this.BATCH_SIZE) {
                                 batches.push(allTextNodes.slice(i, i + this.BATCH_SIZE));
                         }
 
-                        const promises = batches.map(batch => this.limit(() => this.translateBatch(batch)));
-                        const results = await Promise.all(promises);
-                        const translatedTextNodes = results.flat();
+                        let promises = batches.map(batch => this.limit(() => this.translateBatch(batch)));
+                        let results = await Promise.all(promises);
+                        let translatedTextNodes = results.flat();
 
-                        const nodeIdxMap = {};
+                        let nodeIdxMap = {};
                         nodeRefs.forEach((ref, idx) => {
                                 if (!nodeIdxMap[ref.itemIdx]) nodeIdxMap[ref.itemIdx] = [];
                                 nodeIdxMap[ref.itemIdx].push({ idx, text: translatedTextNodes[idx] });
@@ -142,12 +142,12 @@ export class AlibabaService {
 
                         data.forEach((item, itemIdx) => {
                                 if (item.content && cheerioObjs[itemIdx]) {
-                                        const { $, style } = cheerioObjs[itemIdx];
+                                        let { $, style } = cheerioObjs[itemIdx];
                                         let textNodeIdx = 0;
 
-                                        const replaceTextNodes = (node) => {
+                                        let replaceTextNodes = (node) => {
                                                 if (node.type === 'text' && node.data.trim()) {
-                                                        const ref = nodeIdxMap[itemIdx] && nodeIdxMap[itemIdx][textNodeIdx];
+                                                        let ref = nodeIdxMap[itemIdx] && nodeIdxMap[itemIdx][textNodeIdx];
                                                         if (ref) node.data = ref.text;
                                                         textNodeIdx++;
                                                 } else if (node.children && node.children.length) {
@@ -161,26 +161,8 @@ export class AlibabaService {
                                                 replaceTextNodes(node);
                                         }
 
-                                        const formattedStyle = style ? `    <style>\n${style.split('\n').map(line => '        ' + line).join('\n')}\n    </style>\n` : '';
-                                        const formattedContent = $.root().html()
-                                                .replace(/<div/g, '<DIV')
-                                                .replace(/<\/div>/g, '</DIV>')
-                                                .replace(/<img/g, '<IMG')
-                                                .replace(/<\/img>/g, '')
-                                                .replace(/<br\/?>/g, '<BR/>')
-                                                .replace(/<b>/g, '<B>')
-                                                .replace(/<\/b>/g, '</B>')
-                                                .replace(/<table/g, '<TABLE')
-                                                .replace(/<\/table>/g, '</TABLE>')
-                                                .replace(/<tbody/g, '<TBODY')
-                                                .replace(/<\/tbody>/g, '</TBODY>')
-                                                .replace(/<tr/g, '<TR')
-                                                .replace(/<\/tr>/g, '</TR>')
-                                                .replace(/<td/g, '<TD')
-                                                .replace(/<\/td>/g, '</TD>')
-                                                .replace(/<span/g, '<SPAN')
-                                                .replace(/<\/span>/g, '</SPAN>');
-
+                                        let formattedStyle = style ? `    <style>\n${style.split('\n').map(line => '        ' + line).join('\n')}\n    </style>\n` : '';
+                                        let formattedContent = $.root().html();
                                         item.content = formattedStyle + formattedContent;
                                 }
                         });
@@ -190,9 +172,9 @@ export class AlibabaService {
         }
 
         async saveTranslatedData(data) {
-                const outputFile = this.generateOutputFileName();
-                const outputPath = path.join(this.backupDir, outputFile);
-                const latestPath = path.join(this.backupDir, 'latest_translation.json');
+                let outputFile = this.generateOutputFileName();
+                let outputPath = path.join(this.backupDir, outputFile);
+                let latestPath = path.join(this.backupDir, 'latest_translation.json');
 
                 fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), 'utf8');
                 fs.copyFileSync(outputPath, latestPath);
@@ -200,11 +182,17 @@ export class AlibabaService {
                 return { outputPath, latestPath };
         }
 
-        async processTranslation(apifyUrl) {
+        async processTranslation(apifyUrl, isTranslate = true) {
                 try {
-                        const data = await this.fetchApifyDataByUrl(apifyUrl);
-                        const translatedData = await this.translateContent(data);
-                        const savedPaths = await this.saveTranslatedData(translatedData);
+                        let data = await this.fetchApifyDataByUrl(apifyUrl);
+                        if (!isTranslate) {
+                                return {
+                                        success: true,
+                                        data: data
+                                };
+                        }
+                        let translatedData = await this.translateContent(data);
+                        let savedPaths = await this.saveTranslatedData(translatedData);
 
                         return {
                                 success: true,

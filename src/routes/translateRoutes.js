@@ -13,4 +13,7 @@ router.get('/status', (req, res) => translateController.getTranslationStatus(req
 // Route GET cũng hỗ trợ dịch thuật (để tương thích)
 router.get('/translate', (req, res) => translateController.translate(req, res));
 
+// Route dịch sản phẩm Unopim qua mảng id
+router.post('/unopim/available/translate', (req, res) => translateController.translateUnopimProducts(req, res));
+
 export default router; 
