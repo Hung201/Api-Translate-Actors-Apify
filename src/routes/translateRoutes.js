@@ -4,6 +4,9 @@ import { TranslateController } from '../controllers/TranslateController.js';
 const router = express.Router();
 const translateController = new TranslateController();
 
+// Route dịch title và content bằng Gemini
+router.post('/translate/gemini-titles-content', (req, res) => translateController.translateGeminiTitlesAndContent(req, res));
+
 // Route để dịch thuật
 router.post('/translate', (req, res) => translateController.translate(req, res));
 

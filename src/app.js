@@ -1,9 +1,6 @@
-
 import express from 'express';
 import translateRoutes from './routes/translateRoutes.js';
 import { Logger } from './utils/logger.js';
-import dotenv from 'dotenv';
-dotenv.config();
 
 const app = express();
 
@@ -13,11 +10,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('       ', (req, res) => {
-        res.status(200).json({
-                status: 'OK',
-                timestamp: new Date().toISOString(),
-                uptime: process.uptime()
-        });
+    res.status(200).json({
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
 });
 
 // Routes
@@ -25,19 +22,19 @@ app.use('/api', translateRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-        Logger.error('Unhandled error:', err);
-        res.status(500).json({
-                success: false,
-                error: 'Lỗi server nội bộ'
-        });
+    Logger.error('Unhandled error:', err);
+    res.status(500).json({
+        success: false,
+        error: 'Lỗi server nội bộ'
+    });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
-        res.status(404).json({
-                success: false,
-                error: 'Endpoint không tồn tại'
-        });
+    res.status(404).json({
+        success: false,
+        error: 'Endpoint không tồn tại'
+    });
 });
 
 export default app; 

@@ -2,10 +2,10 @@ import fetch from 'node-fetch';
 
 export class AvailableAlibabaService {
     constructor() {
-        this.apiUrl = process.env.TRANSLATE_API_URL || 'https://api-translate.daisan.vn/translate/batch';
+        this.apiUrl = process.env.TRANSLATE_API_URL || 'https://api-translate.daisan.vn/free-translate/batch';
         this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE) || 125;
         this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES) || 7;
-        this.productApiUrl = process.env.PRODUCT_API_URL || 'http://localhost:8000/api/check-multiple-products';
+        this.productApiUrl = process.env.PRODUCT_API_URL || 'https://unopim.daisan.asia/api/check-multiple-products';
     }
 
     async getProductValuesById(id) {
@@ -22,14 +22,13 @@ export class AvailableAlibabaService {
     async retryFetch(url, options, maxRetries = 3) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`🔄 API attempt ${attempt}/${maxRetries}`);
                 const response = await fetch(url, options);
                 if (response.ok) {
                     return response;
                 }
                 throw new Error(`HTTP ${response.status}: ${await response.text()}`);
             } catch (error) {
-                console.log(`❌ Attempt ${attempt} failed:`, error.message);
+                console.log(`Attempt ${attempt} failed:`, error.message);
                 if (attempt === maxRetries) {
                     throw error;
                 }
@@ -40,8 +39,6 @@ export class AvailableAlibabaService {
     }
 
     async translateBatch(texts) {
-        const batchStartTime = Date.now();
-
         // Kiểm tra độ dài data
         const requestBody = {
             texts,
@@ -49,13 +46,9 @@ export class AvailableAlibabaService {
             source_lang: 'auto'
         };
         const requestString = JSON.stringify(requestBody);
-        console.log('Request body length:', requestString.length);
-        console.log('Total text characters:', texts.reduce((sum, t) => sum + (t ? t.length : 0), 0));
-        console.log('Number of texts:', texts.length);
 
         // Nếu request body quá lớn (> 75KB), chia nhỏ batch
         if (requestString.length > 75000) {
-            console.log('Request too large, splitting batch...');
             const batchSize = Math.max(1, Math.floor(texts.length / 2)); // Chia đôi batch
             const batches = [];
 
@@ -66,14 +59,10 @@ export class AvailableAlibabaService {
 
             // Xử lý song song các batch
             const batchPromises = batches.map((batch, index) => {
-                console.log(`Processing batch ${index + 1}/${batches.length}`);
                 return this.translateBatch(batch);
             });
 
             const results = await Promise.all(batchPromises);
-            const batchEndTime = Date.now();
-            const batchDuration = (batchEndTime - batchStartTime) / 1000;
-            console.log(`🔄 Batch processing completed in ${batchDuration.toFixed(2)}s`);
             return results.flat(); // Ghép tất cả kết quả
         }
 
@@ -88,11 +77,6 @@ export class AvailableAlibabaService {
             throw new Error(`API error: ${response.status} - ${await response.text()}`);
         }
         let data = await response.json();
-
-        const batchEndTime = Date.now();
-        const batchDuration = (batchEndTime - batchStartTime) / 1000;
-        console.log(`📝 API call completed in ${batchDuration.toFixed(2)}s for ${texts.length} texts`);
-        console.log(`✅ Translation successful for ${texts.length} texts`);
 
         return data.translated_texts;
     }
@@ -126,6 +110,12 @@ export class AvailableAlibabaService {
         // 3. Dịch batch song song
         const startTime = Date.now();
         let translatedNames = [], translatedDescriptions = [];
+
+        // Tính tổng ký tự cần dịch
+        const totalChars = names.reduce((sum, text) => sum + (text ? text.length : 0), 0) +
+            descriptions.reduce((sum, text) => sum + (text ? text.length : 0), 0);
+        console.log(`📊 Tổng ký tự cần dịch: ${totalChars.toLocaleString()}`);
+
         try {
             // Dịch song song thay vì tuần tự
             [translatedNames, translatedDescriptions] = await Promise.all([
@@ -134,9 +124,18 @@ export class AvailableAlibabaService {
             ]);
             const endTime = Date.now();
             const duration = (endTime - startTime) / 1000; // Chuyển sang giây
+
+            // Tính ký tự đã dịch thành công
+            const translatedChars = translatedNames.reduce((sum, text) => sum + (text ? text.length : 0), 0) +
+                translatedDescriptions.reduce((sum, text) => sum + (text ? text.length : 0), 0);
+
             console.log(`✅ Dịch hoàn thành trong ${duration.toFixed(2)} giây`);
+            console.log(`📈 Ký tự đã dịch: ${translatedChars.toLocaleString()}/${totalChars.toLocaleString()}`);
+            console.log(`⚡ Tốc độ: ${(translatedChars / duration).toFixed(0)} ký tự/giây`);
             console.log('Translated names count:', translatedNames.length);
             console.log('Translated descriptions count:', translatedDescriptions.length);
+            console.log('Sample translated name:', translatedNames[0]);
+            console.log('Sample translated description:', translatedDescriptions[0]);
         } catch (error) {
             const endTime = Date.now();
             const duration = (endTime - startTime) / 1000;

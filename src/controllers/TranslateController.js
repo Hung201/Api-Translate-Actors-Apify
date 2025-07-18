@@ -1,10 +1,12 @@
 import { AlibabaService } from '../services/AlibabaService.js';
 import { AvailableAlibabaService } from '../services/AvailableAlibabaService.js';
+import { GeminiAlibabaService } from '../services/GeminiAlibabaService.js';
 
 export class TranslateController {
     constructor() {
         this.alibabaService = new AlibabaService();
         this.availableAlibabaService = new AvailableAlibabaService();
+        this.geminiAlibabaService = new GeminiAlibabaService();
     }
 
     async translate(req, res) {
@@ -78,6 +80,29 @@ export class TranslateController {
             return res.status(200).json({ success: true, results });
         } catch (error) {
             return res.status(500).json({ success: false, error: error.message });
+        }
+    }
+
+    async translateGeminiTitlesAndContent(req, res) {
+        try {
+            let apifyUrl = req.body.url || req.query.url;
+            if (!apifyUrl) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Thiếu url Apify'
+                });
+            }
+            const newDataset = await this.geminiAlibabaService.translateApifyDatasetTitlesAndContent(apifyUrl);
+            return res.status(200).json({
+                success: true,
+                message: 'Dịch title và content bằng Gemini thành công',
+                data: newDataset
+            });
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
     }
 } 
