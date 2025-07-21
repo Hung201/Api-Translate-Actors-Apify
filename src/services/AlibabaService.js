@@ -7,14 +7,15 @@ import { GeminiAlibabaService } from './GeminiAlibabaService.js';
 
 export class AlibabaService {
     constructor() {
-        this.apiUrl = process.env.TRANSLATE_API_URL || 'https://api-translate.daisan.vn/free-translate/batch';
-        this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE) || 125;
-        this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES) || 7;
+        this.apiUrl = process.env.TRANSLATE_API_URL;
+        this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE);
+        this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES);
         this.limit = pLimit(this.CONCURRENT_BATCHES);
-        this.backupDir = process.env.TRANSLATE_BACKUP_DIR || 'backup_translations';
+        this.backupDir = process.env.TRANSLATE_BACKUP_DIR;
         this.geminiService = new GeminiAlibabaService();
         this.ensureBackupDirectory();
     }
+
 
     ensureBackupDirectory() {
         if (!fs.existsSync(this.backupDir)) {
@@ -113,26 +114,49 @@ export class AlibabaService {
         }
     }
 
-    async translateContent(data) {
-        // Dịch titles bằng Gemini
-        let titles = data.map(item => item.title);
-        let translatedTitles = [];
-        for (let i = 0; i < titles.length; i++) {
-            translatedTitles[i] = await this.geminiService.translateTitleWithGemini(titles[i]);
+    // Thêm hàm retry cho batch lỗi
+    async retry(fn, retries = 2) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                return await fn();
+            } catch (e) {
+                if (i === retries) throw e;
+            }
         }
-        data.forEach((item, i) => {
-            item.title = translatedTitles[i] || item.title;
-        });
-        // Dịch content bằng API cũ
-        let { allTextNodes, nodeRefs, cheerioObjs } = this.extractTextNodesFromContent(data);
+    }
+
+    async translateContent(data) {
+        // Dịch title song song
+        const titlePromise = Promise.all(
+            data.map(item => this.geminiService.translateTitleWithGemini(item.title))
+        );
+
+        // Dịch content song song
+        const { allTextNodes, nodeRefs, cheerioObjs } = this.extractTextNodesFromContent(data);
+        let contentPromise = Promise.resolve([]);
         if (allTextNodes.length > 0) {
             let batches = [];
             for (let i = 0; i < allTextNodes.length; i += this.BATCH_SIZE) {
                 batches.push(allTextNodes.slice(i, i + this.BATCH_SIZE));
             }
-            let promises = batches.map(batch => this.limit(() => this.translateBatch(batch)));
-            let results = await Promise.all(promises);
-            let translatedTextNodes = results.flat();
+            // Áp dụng retry cho từng batch
+            let promises = batches.map(batch => this.limit(() => this.retry(() => this.translateBatch(batch), 2)));
+            // Dùng Promise.allSettled để bỏ qua batch lỗi sau khi đã retry
+            contentPromise = Promise.allSettled(promises).then(results =>
+                results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+            );
+        }
+
+        // Chờ cả 2 xong
+        const [translatedTitles, translatedTextNodes] = await Promise.all([titlePromise, contentPromise]);
+
+        // Gán lại title đã dịch
+        data.forEach((item, i) => {
+            item.title = translatedTitles[i] || item.title;
+        });
+
+        // Gán lại content đã dịch
+        if (allTextNodes.length > 0) {
             let nodeIdxMap = {};
             nodeRefs.forEach((ref, idx) => {
                 if (!nodeIdxMap[ref.itemIdx]) nodeIdxMap[ref.itemIdx] = [];
@@ -162,7 +186,15 @@ export class AlibabaService {
                 }
             });
         }
-        return data;
+        // Chỉ trả về các trường cần thiết
+        return data.map(item => ({
+            title: item.title,
+            content: item.content,
+            thumbnail: item.thumbnail,
+            images: item.images,
+            price: item.price,
+            sku: item.sku
+        }));
     }
 
     async saveTranslatedData(data) {
@@ -180,9 +212,16 @@ export class AlibabaService {
         try {
             let data = await this.fetchApifyDataByUrl(apifyUrl);
             if (!isTranslate) {
+                // Chỉ trả về các trường cần thiết nếu không dịch
                 return {
                     success: true,
-                    data: data
+                    data: data.map(item => ({
+                        title: item.title,
+                        content: item.content,
+                        images: item.images,
+                        price: item.price,
+                        sku: item.sku
+                    }))
                 };
             }
             let translatedData = await this.translateContent(data);

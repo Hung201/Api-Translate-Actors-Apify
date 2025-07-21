@@ -2,10 +2,10 @@ import fetch from 'node-fetch';
 
 export class AvailableAlibabaService {
     constructor() {
-        this.apiUrl = process.env.TRANSLATE_API_URL || 'https://api-translate.daisan.vn/free-translate/batch';
-        this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE) || 125;
-        this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES) || 7;
-        this.productApiUrl = process.env.PRODUCT_API_URL || 'https://unopim.daisan.asia/api/check-multiple-products';
+        this.apiUrl = process.env.TRANSLATE_API_URL;
+        this.BATCH_SIZE = parseInt(process.env.TRANSLATE_BATCH_SIZE);
+        this.CONCURRENT_BATCHES = parseInt(process.env.TRANSLATE_CONCURRENT_BATCHES);
+        this.productApiUrl = process.env.PRODUCT_API_URL;
     }
 
     async getProductValuesById(id) {

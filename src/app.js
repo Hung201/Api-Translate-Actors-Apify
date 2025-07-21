@@ -1,7 +1,6 @@
 import express from 'express';
 import translateRoutes from './routes/translateRoutes.js';
 import { Logger } from './utils/logger.js';
-
 const app = express();
 
 // Middleware

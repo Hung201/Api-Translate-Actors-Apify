@@ -1,6 +1,8 @@
 import { AlibabaService } from '../services/AlibabaService.js';
 import { AvailableAlibabaService } from '../services/AvailableAlibabaService.js';
 import { GeminiAlibabaService } from '../services/GeminiAlibabaService.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export class TranslateController {
     constructor() {
